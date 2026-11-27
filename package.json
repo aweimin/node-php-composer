@@ -51,7 +51,8 @@
 		"lib": "tsc -outDir lib --target es6 --module commonjs",
 		"es": "tsc -outDir es --target es2024",
 		"build": "pnpm clean && pnpm  rollup",
-		"rollup": "rollup -c"
+		"rollup": "rollup -c",
+		"release": "node scripts/release.js"
 	},
 	"keywords": [
 		"php",
