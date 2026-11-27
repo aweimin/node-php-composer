@@ -110,6 +110,21 @@ console.log(version()); // 2.11.3
 - 内置 Composer：**2.11.3**（2026-11-24 发布，[更新日志](https://getcomposer.org/changelog/2.11.3)）
 - Composer 官方下载地址：<https://getcomposer.org/download/>
 
+## 发布（维护者）
+
+版本升级与发布由一键脚本完成：更新 `package.json` 版本、提交、打 `vX.Y.Z` tag 并推送，随后 GitHub Actions 自动发布到 npm。
+
+```bash
+pnpm release patch          # 2.0.3 -> 2.0.4
+pnpm release minor          # 2.0.3 -> 2.1.0
+pnpm release major          # 2.0.3 -> 3.0.0
+pnpm release 2.1.0          # 指定版本
+pnpm release patch --wait   # 推送后等待 npm 上线确认
+pnpm release patch --dry-run
+```
+
+执行前需保证工作区干净、`main` 分支且与 `origin/main` 同步。发布使用 npm Trusted Publishing（OIDC），无需本地 token。
+
 ## License
 
 MIT
