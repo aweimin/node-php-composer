@@ -12,12 +12,20 @@ if (!existsSync(composer)) {
 	process.exit(1);
 }
 
-// Windows 下 npm 安装的 php 是 php.cmd shim，spawn 默认 shell:false 只能解析 .exe，
-// 找不到 .cmd 会抛 ENOENT。开启 shell 让系统按 PATHEXT 解析 php.cmd（也能解析真实 php.exe）。
-const child = spawn(php, [composer, ...process.argv.slice(2)], {
-	stdio: 'inherit',
-	shell: process.platform === 'win32',
-});
+// Windows 下 npm 安装的 php 是 php.cmd shim，需要 shell 才能按 PATHEXT 解析。
+// 注意：Node 对 `spawn(cmd, argsArray, { shell: true })` 会发 DEP0190 弃用警告
+// （shell 模式下参数数组只做字符串拼接、未转义）。这里改为把整条命令预拼成单个
+// 字符串传入、不传 args 数组，即可消除警告；参数按 Windows 规则加引号处理。
+const args = [composer, ...process.argv.slice(2)];
+let command;
+let child;
+if (process.platform === 'win32') {
+	const quote = (a) => (/\s/.test(a) ? `"${a}"` : a);
+	command = [php, ...args].map(quote).join(' ');
+	child = spawn(command, { stdio: 'inherit', shell: true });
+} else {
+	child = spawn(php, args, { stdio: 'inherit' });
+}
 
 child.on('error', (error) => {
 	console.error(
