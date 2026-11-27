@@ -12,7 +12,12 @@ if (!existsSync(composer)) {
 	process.exit(1);
 }
 
-const child = spawn(php, [composer, ...process.argv.slice(2)], { stdio: 'inherit' });
+// Windows 下 npm 安装的 php 是 php.cmd shim，spawn 默认 shell:false 只能解析 .exe，
+// 找不到 .cmd 会抛 ENOENT。开启 shell 让系统按 PATHEXT 解析 php.cmd（也能解析真实 php.exe）。
+const child = spawn(php, [composer, ...process.argv.slice(2)], {
+	stdio: 'inherit',
+	shell: process.platform === 'win32',
+});
 
 child.on('error', (error) => {
 	console.error(
