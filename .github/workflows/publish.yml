@@ -1,100 +1,68 @@
 name: Publish npm Package
 
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
+    push:
+        tags:
+            - "v*"
+    workflow_dispatch:
 
+# Trusted Publishing 通过 OIDC 发布，无需 NPM_TOKEN。
 permissions:
-  contents: read
+    contents: read
+    id-token: write
+
+# 同一引用上避免多个发布任务并发执行。
+concurrency:
+    group: npm-publish-${{ github.ref }}
+    cancel-in-progress: false
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+    publish:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
 
-    permissions:
-      contents: read
-      id-token: write
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
 
-    steps:
-      # 1. Checkout
-      - name: Checkout
-        uses: actions/checkout@v7
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v6
+              with:
+                  version: 12.18.0
 
-      # 2. Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          package-manager-cache: false
+            - name: Setup Node.js
+              uses: actions/setup-node@v7
+              with:
+                  node-version: "24"
+                  cache: pnpm
 
-      # 3. Setup pnpm
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 12.18.0
+            # npm Trusted Publishing 需要 npm >= 11.5.1，固定大版本避免 runner 自带版本过旧。
+            - name: Ensure npm version
+              run: |
+                  npm install -g npm@11
+                  node --version
+                  npm --version
 
-      # 4. Upgrade npm CLI
-      - name: Upgrade npm CLI
-        run: |
-          npm install -g npm@latest
-          echo "Node version:"
-          node --version
-          echo "npm version:"
-          npm --version
-          echo "Registry:"
-          npm config get registry
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      # 5. Clean npm authentication configuration
-      - name: Clean npm authentication configuration
-        shell: bash
-        run: |
-          npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+            - name: Build
+              run: pnpm build
 
-          if [ -f "$npmrc" ]; then
-            echo "Checking npm user configuration: $npmrc"
-            sed -i '/_authToken/d' "$npmrc"
-          fi
+            # 仅校验 tag 发布，手动触发时跳过。
+            - name: Verify tag matches package version
+              if: startsWith(github.ref, 'refs/tags/v')
+              run: |
+                  version=$(node -p "require('./package.json').version")
+                  tag="${GITHUB_REF_NAME#v}"
+                  if [ "$tag" != "$version" ]; then
+                    echo "::error::Tag v$tag 与 package.json 版本 $version 不一致"
+                    exit 1
+                  fi
+                  echo "版本校验通过: $version"
 
-          if [ -f ".npmrc" ]; then
-            echo "Checking project .npmrc"
-            sed -i '/_authToken/d' ".npmrc"
-          fi
+            - name: Verify package
+              run: npm pack --dry-run
 
-      # 6. Diagnose OIDC
-      - name: Diagnose npm OIDC
-        run: |
-          echo "===== Versions ====="
-          node --version
-          npm --version
-
-          echo "===== Registry ====="
-          npm config get registry
-
-          echo "===== GitHub OIDC ====="
-          node -e "console.log({
-            requestUrl: !!process.env.ACTIONS_ID_TOKEN_REQUEST_URL,
-            requestToken: !!process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN
-          })"
-
-          echo "===== npm auth environment ====="
-          node -e "console.log({
-            nodeAuthToken: !!process.env.NODE_AUTH_TOKEN
-          })"
-
-      # 7. Install dependencies
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # 8. Build
-      - name: Build
-        run: pnpm build
-
-      # 9. Verify package
-      - name: Verify package
-        run: npm pack --dry-run
-
-      # 10. Publish to npm using OIDC
-      - name: Publish to npm
-        run: npm publish --provenance
+            - name: Publish to npm
+              run: npm publish --access public --provenance
